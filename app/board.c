@@ -1,0 +1,92 @@
+#include <stdio.h>
+#include <string.h>
+#include <stdint.h>
+#include <stdbool.h>
+#include "stm32f4xx.h"
+#include "FreeRTOS.h"
+#include "task.h"
+#include "board.h"
+#include "led.h"
+#include "led_desc.h"
+#include "key.h"
+#include "key_desc.h"
+#include "usart.h"
+#include "usart_desc.h"
+
+
+
+static struct led_desc led1_desc = 
+{
+	.Port = GPIOA,
+	.Pin = GPIO_Pin_6,
+	.OnBit = Bit_RESET,
+	.OffBit = Bit_SET,
+};
+led_desc_t led1 = &led1_desc;
+
+static struct led_desc led2_desc = 
+{
+	.Port = GPIOA,
+	.Pin = GPIO_Pin_7,
+	.OnBit = Bit_RESET,
+	.OffBit = Bit_SET,
+};
+led_desc_t led2 = &led2_desc;
+
+static struct key_desc key1_desc = 
+{
+	.Port = GPIOE,
+	.Pin = GPIO_Pin_4,
+	.State = true,
+};
+key_desc_t key1 = &key1_desc;
+
+static struct key_desc key2_desc = 
+{
+	.Port = GPIOE,
+	.Pin = GPIO_Pin_3,
+	.State = true,
+};
+key_desc_t key2 = &key2_desc;
+
+static struct usart_desc usart1_desc = 
+{
+	.Port = USART1,
+	.GPort = GPIOA,
+	.TxPin = GPIO_Pin_9,
+	.RxPin = GPIO_Pin_10,
+	.IRQn =  USART1_IRQn,
+};
+usart_desc_t usart1 = &usart1_desc;
+
+static struct usart_desc usart2_desc = 
+{
+	.Port = USART2,
+	.GPort = GPIOA,
+	.TxPin = GPIO_Pin_2,
+	.RxPin = GPIO_Pin_3,
+	.IRQn =  USART2_IRQn,
+};
+usart_desc_t usart2 = &usart2_desc;
+
+void board_init(void)
+{
+    RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOA, ENABLE);
+	RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOE, ENABLE);
+	RCC_APB2PeriphClockCmd(RCC_APB2Periph_USART1, ENABLE);
+	RCC_APB1PeriphClockCmd(RCC_APB1Periph_USART2, ENABLE);
+	NVIC_PriorityGroupConfig(NVIC_PriorityGroup_4);	//中断控制器分组设置
+	RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_DMA1, ENABLE); 
+	PWR_BackupAccessCmd(ENABLE);
+	RCC_LSEConfig(RCC_LSE_ON);
+	while (RCC_GetFlagStatus(RCC_FLAG_LSERDY) == RESET);
+	RCC_RTCCLKConfig(RCC_RTCCLKSource_LSE);
+
+    led_init(led1);
+    led_init(led2);
+    key_init(key1);
+    key_init(key2);
+    usart_init(usart1);
+}
+
+
