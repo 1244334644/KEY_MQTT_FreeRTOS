@@ -400,7 +400,7 @@ unsigned char OneNet_FillBuf(char *buf)
 {
 	
 	char text[48];
-	strcpy(buf, "{\"id\":\"123\",\"version\":\"1.0\",\"params\":{");
+	strcpy(buf, "{\"id\":\"1\",\"version\":\"1.0\",\"params\":{");
 	
 	// 根据布尔值动态选择"true"或"false"
 	memset(text, 0, sizeof(text));

@@ -13,6 +13,7 @@ virtualFolder:
         - path: app/main.c
         - path: app/board.c
         - path: app/wifi_connect.c
+        - path: app/work_queue.c
       folders: []
     - name: driver
       files: []
