@@ -328,7 +328,7 @@ _Bool OneNET_RegisterDevice(void)
 //
 //	入口参数：	无
 //
-//	返回参数：	1-成功	0-失败
+//	返回参数：	1-失败	0-成功
 //
 //	说明：		与onenet平台建立连接
 //==========================================================
@@ -445,15 +445,26 @@ void OneNet_SendData(void)
 	
 	memset(buf, 0, sizeof(buf));
 	
+	// 【调试】打印当前状态
+	UsartPrintf(USART_DEBUG, "[SEND] Current State: LED1=%d, LED2=%d, KEY1=%d, KEY2=%d\r\n", 
+		led1_state, led2_state, key1_state, key2_state);
+	
 	// 1. 填充 JSON 数据
 	if(OneNet_FillBuf(buf) > 0)
 	{
         // 打印调试，看看生成的 JSON 对不对
-        UsartPrintf(USART_DEBUG, "Report JSON: %s\r\n", buf);
+        UsartPrintf(USART_DEBUG, "[SEND] Report JSON: %s\r\n", buf);
 
         // 2. 直接调用 Publish 发送到 物模型 Topic
         // 这会自动封装 MQTT 头、计算长度并发送
         OneNET_Publish(POST_TOPIC, buf);
+        
+        // 【调试】确认发送完成
+        UsartPrintf(USART_DEBUG, "[SEND] Data sent successfully\r\n");
+	}
+	else
+	{
+		UsartPrintf(USART_DEBUG, "[SEND] ERROR: Failed to fill buffer\r\n");
 	}
 }
 
