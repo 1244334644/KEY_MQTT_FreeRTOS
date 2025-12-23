@@ -4,7 +4,7 @@
 
 #include "led.h"
 #include "key.h"
-
+#include "aht20.h"
 void board_init(void);
 extern led_desc_t led1;
 extern led_desc_t led2;

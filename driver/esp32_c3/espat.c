@@ -471,7 +471,19 @@ bool espat_get_wifi_info(esp_wifi_info_t *info)
 
     return true;
 }
+const char *espat_http_get(const char *url, const char *response)
+{
+//    AT+HTTPCLIENT=2,1,"https://api.seniverse.com/v3/weather/now.json?key=SAQyoOxFBGFh4lfRp&location=Guangzhou&language=en&unit=c",,,2
+//    +HTTPCLIENT:277,{"results":[{"location":{"id":"WS0E9D8WN298","name":"Guangzhou","country":"CN","path":"Guangzhou,Guangzhou,Guangdong,China","timezone":"Asia/Shanghai","timezone_offset":"+08:00"},"now":{"text":"Cloudy","code":"4","temperature":"25"},"last_update":"2025-11-14T15:07:53+08:00"}]}
 
+//    OK
+    char *txbuf = rxbuf;
+    snprintf(txbuf, sizeof(rxbuf), "AT+HTTPCLIENT=2,1,\"%s\",,,2\r\n",url);
+    bool ret = espat_write_command(txbuf, 5000);
+     
+    return ret ? espat_get_response() : NULL;
+       
+}
 bool wifi_is_connected()
 {
     esp_wifi_info_t info;

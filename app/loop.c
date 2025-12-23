@@ -14,6 +14,7 @@
 #include "wifi_connect.h"
 #include "onenet.h"
 #include "loop.h"
+#include "weather.h"
 
 
 #define MILLISECONDS(x) (x)
@@ -28,6 +29,7 @@
 #define MQTT_UPDATE_INTERVAL   MILLISECONDS(200)  // 【关键优化】从1秒改为200ms，快速响应
 #define KEY_UPDATE_INTERVAL   MILLISECONDS(50)
 #define INNER_UPDATE_INTERVAL   SECONDS(3)
+#define OUTDOOR_UPDATE_INTERVAL   MINUTES(1) 
 // ================= 全局变量 =================
 // 这些变量在 onenet.c 中被 extern 引用，用于模拟传感器数据
 bool led1_state, led2_state, key1_state, key2_state;
@@ -35,7 +37,16 @@ bool led1_state, led2_state, key1_state, key2_state;
 // 【新增】状态改变标志
 extern bool state_changed;
 
-static TimerHandle_t wifi_update_timer,mqtt_update_timer,key_update_timer,inner_update_timer;
+// 【新增】声明外部全局变量（在onenet.c中定义）
+extern float g_temperature;
+extern float g_inner_temp;
+extern float g_inner_humi;
+extern char g_city[32];
+extern char g_location[128];
+extern int weather_code;
+
+
+static TimerHandle_t wifi_update_timer,mqtt_update_timer,key_update_timer,inner_update_timer,outdoor_update_timer;
 
 /**
  * @brief WiFi状态更新任务函数
@@ -242,7 +253,8 @@ static void mqtt_update()
     // 4. 定期上报 - 改为5秒一次（降低频率，避免干扰实时上报）
     else if((current_time - last_send_time) >= pdMS_TO_TICKS(5000))
     {
-        printf("[MQTT] Periodic report\n");
+        printf("[MQTT] Periodic report (LED1=%d, LED2=%d, InnerT=%.1f, OuterT=%.1f)\n", 
+            led1_state, led2_state, g_inner_temp, g_temperature);
         OneNet_SendData();
         last_send_time = xTaskGetTickCount();
     }
@@ -316,6 +328,7 @@ static void key_update()
     }
 }
 
+
 static void inner_update()
 {
 	
@@ -346,7 +359,108 @@ static void inner_update()
 	}
 	last_temperature = temp;
 	last_humidity = humi;
+	
+	// 【关键修复】更新全局变量，供OneNet_FillBuf使用
+	g_inner_temp = temp;
+	g_inner_humi = humi;
+	
 	printf("[AHT20] Temperature: %.1f, Humidity: %.1f\r\n", temp, humi);
+	printf("[UPDATE] Inner: %.1f°C %.1f%%, Outer: %.1f°C, Weather: %d\r\n", 
+		g_inner_temp, g_inner_humi, g_temperature, weather_code);
+
+}
+
+static void outdoor_update()
+{
+	static weather_info_t last_weather={0};
+
+	xTimerChangePeriod(outdoor_update_timer, pdMS_TO_TICKS(OUTDOOR_UPDATE_INTERVAL),0);
+
+	weather_info_t weather={0};
+	const char *weather_url = "https://api.seniverse.com/v3/weather/now.json?key=SAQyoOxFBGFh4lfRp&location=Guangzhou&language=en&unit=c";
+	const char *weather_http_response = espat_http_get(weather_url, NULL);
+	if(weather_http_response == NULL)
+	{
+		printf("[WEATHER] HTTP GET Error\r\n");
+		return;
+	}
+	if(!parse_seniverse_response(weather_http_response, &weather))
+	{
+		printf("[WEATHER] Parse WEATHER Response Error\r\n");
+		return;
+	}
+	if(memcmp(&weather, &last_weather, sizeof(weather_info_t)) == 0)
+	{
+		return;
+	}
+	memcpy(&last_weather, &weather, sizeof(weather_info_t));
+	
+	// 【关键修复】更新全局变量，供OneNet_FillBuf使用
+	strncpy(g_city, weather.city, sizeof(g_city) - 1);
+	g_city[sizeof(g_city) - 1] = '\0';  // 确保字符串结束
+	
+	// 【优化】提取location的最后一部分（如"panyu"），减少字符串长度
+	// 原始格式：Guangzhou,Guangzhou,Guangdong,China -> 提取最后一个逗号后的部分
+	const char *last_part = strrchr(weather.loaction, ',');
+	if(last_part != NULL)
+	{
+		last_part++;  // 跳过逗号
+		// 如果最后一部分太长（如"China"），则使用倒数第二部分（如"Guangdong"）
+		if(strlen(last_part) > 10)  // "China"这种国家名通常较短，我们想要更具体的区域
+		{
+			// 查找倒数第二个逗号
+			char temp[128];
+			strncpy(temp, weather.loaction, sizeof(temp) - 1);
+			temp[sizeof(temp) - 1] = '\0';
+			
+			char *second_last = strrchr(temp, ',');
+			if(second_last != NULL)
+			{
+				*second_last = '\0';  // 截断最后一部分
+				last_part = strrchr(temp, ',');
+				if(last_part != NULL)
+				{
+					last_part++;
+					strncpy(g_location, last_part, sizeof(g_location) - 1);
+				}
+				else
+				{
+					strncpy(g_location, temp, sizeof(g_location) - 1);
+				}
+			}
+			else
+			{
+				strncpy(g_location, weather.loaction, sizeof(g_location) - 1);
+			}
+		}
+		else
+		{
+			strncpy(g_location, last_part, sizeof(g_location) - 1);
+		}
+	}
+	else
+	{
+		// 没有逗号，直接使用完整location
+		strncpy(g_location, weather.loaction, sizeof(g_location) - 1);
+	}
+	g_location[sizeof(g_location) - 1] = '\0';
+	
+	g_temperature = weather.temperature;
+	
+	// 解析天气代码 (简单映射)
+	if(strstr(weather.weather, "Sunny") || strstr(weather.weather, "Clear"))
+		weather_code = 0;  // 晴天
+	else if(strstr(weather.weather, "Cloudy"))
+		weather_code = 1;  // 多云
+	else if(strstr(weather.weather, "Rain") || strstr(weather.weather, "Shower"))
+		weather_code = 2;  // 雨天
+	else if(strstr(weather.weather, "Snow"))
+		weather_code = 3;  // 雪天
+	else
+		weather_code = 1;  // 默认多云
+	
+	printf("[WEATHER] %s %s %.1f°C (code=%d)\n", 
+		g_city, weather.weather, g_temperature, weather_code);
 
 }
 
@@ -375,7 +489,9 @@ void main_loop_init(void)
 	mqtt_update_timer = xTimerCreate("mqtt_update", pdMS_TO_TICKS(MQTT_UPDATE_INTERVAL), pdTRUE, mqtt_update, mloop_timer_cb);
 	key_update_timer = xTimerCreate("key_update", pdMS_TO_TICKS(KEY_UPDATE_INTERVAL), pdTRUE, key_update, mloop_timer_cb);
 	inner_update_timer = xTimerCreate("inner_update", pdMS_TO_TICKS(INNER_UPDATE_INTERVAL), pdTRUE,inner_update, mloop_timer_cb);
-	if(wifi_update_timer == NULL || mqtt_update_timer == NULL || key_update_timer == NULL || inner_update_timer == NULL)
+    outdoor_update_timer = xTimerCreate("outdoor_update", pdMS_TO_TICKS(OUTDOOR_UPDATE_INTERVAL), pdTRUE,outdoor_update, mloop_timer_cb);
+
+	if(wifi_update_timer == NULL || mqtt_update_timer == NULL || key_update_timer == NULL || inner_update_timer == NULL || outdoor_update_timer == NULL)
 	{
 		printf("[LOOP] Timer creation failed!\n");
 		return;
@@ -387,12 +503,14 @@ void main_loop_init(void)
 	workqueue_run(app_work, mqtt_update);
 	workqueue_run(app_work, key_update);
     workqueue_run(app_work,inner_update);
+    workqueue_run(app_work,outdoor_update);
 
 	printf("[LOOP] Starting timers...\n");
 	xTimerStart(wifi_update_timer, 0);
 	xTimerStart(mqtt_update_timer, 0);
 	xTimerStart(key_update_timer, 0);
 	xTimerStart(inner_update_timer, 0);
+    xTimerStart(outdoor_update_timer, 0);
 
     
 	printf("[LOOP] Initialization complete. Key update interval: %dms\n", KEY_UPDATE_INTERVAL);

@@ -15,6 +15,7 @@ virtualFolder:
         - path: app/wifi_connect.c
         - path: app/work_queue.c
         - path: app/loop.c
+        - path: app/weather.c
       folders: []
     - name: driver
       files: []
@@ -59,6 +60,10 @@ virtualFolder:
         - name: aht20
           files:
             - path: driver/aht20/aht20.c
+          folders: []
+        - name: tim_delay
+          files:
+            - path: driver/tim_delay/tim_delay.c
           folders: []
     - name: firmware
       files: []
@@ -158,6 +163,7 @@ targets:
         - driver/NET/TCP
         - driver/NET/CJSON
         - driver/aht20
+        - driver/tim_delay
       libList: []
     excludeList:
       - <virtual_root>/driver/delay/delay.c

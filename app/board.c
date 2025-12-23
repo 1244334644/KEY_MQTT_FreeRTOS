@@ -14,6 +14,7 @@
 #include "usart_desc.h"
 #include "aht20.h"
 #include "aht20_desc.h"
+#include "tim_delay.h"
 
 
 
@@ -90,6 +91,7 @@ void board_init(void)
 	RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOB, ENABLE);
 	RCC_APB2PeriphClockCmd(RCC_APB2Periph_USART1, ENABLE);
 	RCC_APB1PeriphClockCmd(RCC_APB1Periph_USART2, ENABLE);
+	RCC_APB1PeriphClockCmd(RCC_APB1Periph_TIM6, ENABLE);
 	NVIC_PriorityGroupConfig(NVIC_PriorityGroup_4);	//中断控制器分组设置
 	RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_DMA1, ENABLE); 
 	RCC_APB1PeriphClockCmd(RCC_APB1Periph_I2C1, ENABLE);
@@ -98,12 +100,13 @@ void board_init(void)
 	while (RCC_GetFlagStatus(RCC_FLAG_LSERDY) == RESET);
 	RCC_RTCCLKConfig(RCC_RTCCLKSource_LSE);
 
+	tim_delay_init();
     led_init(led1);
     led_init(led2);
     key_init(key1);
     key_init(key2);
     usart_init(usart1);
-	aht20_init(aht20);
+	aht20_Init(aht20);
 }
 
 

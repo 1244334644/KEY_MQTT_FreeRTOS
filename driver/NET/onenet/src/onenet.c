@@ -395,33 +395,65 @@ extern bool key1_state, key2_state, led1_state, led2_state;
 
 // 【新增】状态改变标志，用于通知主循环立即上报
 bool state_changed = false;
+char g_city[32] = "guangzhou";
+char g_location[128] = "panyu";
+// 【新增】全局变量存储温湿度数据，由inner_update()更新
+float g_temperature = 0.0f;
+
+float g_inner_temp = 0.0f;
+float g_inner_humi = 0.0f;
+int weather_code = 0; // 天气代码，0=晴天，1=多云，2=雨天，3=雪天
 
 unsigned char OneNet_FillBuf(char *buf)
 {
 	
-	char text[48];
+	char text[128];
 	strcpy(buf, "{\"id\":\"1\",\"version\":\"1.0\",\"params\":{");
 	
-	// 根据布尔值动态选择"true"或"false"
+	// ========== weather物模型数据（嵌套对象）==========
 	memset(text, 0, sizeof(text));
-	sprintf(text, "\"key1_state\":{\"value\":%s},", key1_state ? "true" : "false");
+	sprintf(text, "\"weather\":{\"value\":{\"city\":\"%s\",\"location\":\"%s\",\"weather\":%d,\"temp\":%.1f}},", 
+		g_city, g_location, weather_code, g_temperature);
 	strcat(buf, text);
-
+	
+	// ========== 内部温湿度（AHT20传感器数据）==========
 	memset(text, 0, sizeof(text));
-	sprintf(text, "\"key2_state\":{\"value\":%s},", key2_state ? "true" : "false");
+	sprintf(text, "\"inner_temp\":{\"value\":%.1f},", g_inner_temp);
 	strcat(buf, text);
-
+	
+	memset(text, 0, sizeof(text));
+	sprintf(text, "\"inner_humi\":{\"value\":%.1f},", g_inner_humi);
+	strcat(buf, text);
+	
+	// ========== LED状态 ==========
 	memset(text, 0, sizeof(text));
 	sprintf(text, "\"led1_state\":{\"value\":%s},", led1_state ? "true" : "false");
 	strcat(buf, text);
 
 	memset(text, 0, sizeof(text));
-	sprintf(text, "\"led2_state\":{\"value\":%s}", led2_state ? "true" : "false");
+	sprintf(text, "\"led2_state\":{\"value\":%s},", led2_state ? "true" : "false");
+	strcat(buf, text);
+
+	// ========== 按键状态 ==========
+	memset(text, 0, sizeof(text));
+	sprintf(text, "\"key1_state\":{\"value\":%s},", key1_state ? "true" : "false");
+	strcat(buf, text);
+
+	memset(text, 0, sizeof(text));
+	sprintf(text, "\"key2_state\":{\"value\":%s}", key2_state ? "true" : "false");  // 最后一个参数不加逗号
 	strcat(buf, text);
 	
-
 	strcat(buf, "}}");
-	return strlen(buf);
+	
+	// 【安全检查】打印JSON长度，防止缓冲区溢出
+	unsigned int json_len = strlen(buf);
+	UsartPrintf(USART_DEBUG, "[JSON] Length: %d bytes\r\n", json_len);
+	if(json_len > 500)
+	{
+		UsartPrintf(USART_DEBUG, "[JSON] WARNING: JSON too long! (%d > 500)\r\n", json_len);
+	}
+	
+	return json_len;
 
 }
 
@@ -442,7 +474,7 @@ unsigned char OneNet_FillBuf(char *buf)
 //==========================================================
 void OneNet_SendData(void)
 {
-	char buf[256];
+	char buf[512];  // 【修复】增大缓冲区以容纳完整JSON
 	
 	memset(buf, 0, sizeof(buf));
 	
@@ -453,8 +485,26 @@ void OneNet_SendData(void)
 	// 1. 填充 JSON 数据
 	if(OneNet_FillBuf(buf) > 0)
 	{
-        // 打印调试，看看生成的 JSON 对不对
-        UsartPrintf(USART_DEBUG, "[SEND] Report JSON: %s\r\n", buf);
+        // 【优化】不打印完整JSON，避免缓冲区溢出，只打印长度和前80字符
+        unsigned int json_len = strlen(buf);
+        UsartPrintf(USART_DEBUG, "[SEND] JSON Length: %d bytes\r\n", json_len);
+        
+        // 【调试】分段打印JSON（前100字符、中间、最后100字符）
+        if(json_len > 200)
+        {
+            char temp[101];
+            memcpy(temp, buf, 100);
+            temp[100] = '\0';
+            UsartPrintf(USART_DEBUG, "[SEND] JSON Start: %s...\r\n", temp);
+            
+            memcpy(temp, buf + json_len - 100, 100);
+            temp[100] = '\0';
+            UsartPrintf(USART_DEBUG, "[SEND] JSON End: ...%s\r\n", temp);
+        }
+        else
+        {
+            UsartPrintf(USART_DEBUG, "[SEND] JSON: %s\r\n", buf);
+        }
 
         // 2. 直接调用 Publish 发送到 物模型 Topic
         // 这会自动封装 MQTT 头、计算长度并发送
@@ -486,13 +536,27 @@ void OneNET_Publish(const char *topic, const char *msg)
 
 	MQTT_PACKET_STRUCTURE mqtt_packet = {NULL, 0, 0, 0};						//协议包
 	
-	UsartPrintf(USART_DEBUG, "Publish Topic: %s, Msg: %s\r\n", topic, msg);
+	// 【优化】不打印完整消息，只打印长度和topic
+	unsigned int msg_len = strlen(msg);
+	UsartPrintf(USART_DEBUG, "[PUB] Topic: %s, Msg Length: %d\r\n", topic, msg_len);
 	
-	if(MQTT_PacketPublish(MQTT_PUBLISH_ID, topic, msg, strlen(msg), MQTT_QOS_LEVEL0, 0, 1, &mqtt_packet) == 0)
+	uint8_t result = MQTT_PacketPublish(MQTT_PUBLISH_ID, topic, msg, msg_len, MQTT_QOS_LEVEL0, 0, 1, &mqtt_packet);
+	if(result == 0)
 	{
-		esp32_SendData(mqtt_packet._data, mqtt_packet._len);					//向平台发送订阅请求
-		
-		MQTT_DeleteBuffer(&mqtt_packet);										//删包
+		if(mqtt_packet._data != NULL)
+		{
+			UsartPrintf(USART_DEBUG, "[PUB] MQTT Packet: %d bytes\r\n", mqtt_packet._len);
+			esp32_SendData(mqtt_packet._data, mqtt_packet._len);					//向平台发送订阅请求
+			MQTT_DeleteBuffer(&mqtt_packet);										//删包
+		}
+		else
+		{
+			UsartPrintf(USART_DEBUG, "[PUB] ERROR: MQTT packet data is NULL\r\n");
+		}
+	}
+	else
+	{
+		UsartPrintf(USART_DEBUG, "[PUB] ERROR: MQTT_PacketPublish failed, code=%d\r\n", result);
 	}
 
 }
