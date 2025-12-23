@@ -12,6 +12,8 @@
 #include "key_desc.h"
 #include "usart.h"
 #include "usart_desc.h"
+#include "aht20.h"
+#include "aht20_desc.h"
 
 
 
@@ -69,14 +71,28 @@ static struct usart_desc usart2_desc =
 };
 usart_desc_t usart2 = &usart2_desc;
 
+static struct aht20_desc aht20_desc = 
+{
+	.I2C = I2C1,
+	.GPort = GPIOB,
+	.SCLPin = GPIO_Pin_6,
+	.SDAPin = GPIO_Pin_7,
+	.SCLPinsource = GPIO_PinSource6,
+	.SDAPinsource = GPIO_PinSource7,
+};
+aht20_desc_t aht20 = &aht20_desc;
+
+
 void board_init(void)
 {
     RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOA, ENABLE);
 	RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOE, ENABLE);
+	RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOB, ENABLE);
 	RCC_APB2PeriphClockCmd(RCC_APB2Periph_USART1, ENABLE);
 	RCC_APB1PeriphClockCmd(RCC_APB1Periph_USART2, ENABLE);
 	NVIC_PriorityGroupConfig(NVIC_PriorityGroup_4);	//中断控制器分组设置
 	RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_DMA1, ENABLE); 
+	RCC_APB1PeriphClockCmd(RCC_APB1Periph_I2C1, ENABLE);
 	PWR_BackupAccessCmd(ENABLE);
 	RCC_LSEConfig(RCC_LSE_ON);
 	while (RCC_GetFlagStatus(RCC_FLAG_LSERDY) == RESET);
@@ -87,6 +103,7 @@ void board_init(void)
     key_init(key1);
     key_init(key2);
     usart_init(usart1);
+	aht20_init(aht20);
 }
 
 

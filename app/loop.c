@@ -9,6 +9,7 @@
 #include "board.h"
 #include "espat.h"
 #include "key.h"
+#include "aht20.h"
 #include "led.h"
 #include "wifi_connect.h"
 #include "onenet.h"
@@ -26,7 +27,7 @@
 #define WIFI_UPDATE_INTERVAL   SECONDS(5)
 #define MQTT_UPDATE_INTERVAL   MILLISECONDS(200)  // 【关键优化】从1秒改为200ms，快速响应
 #define KEY_UPDATE_INTERVAL   MILLISECONDS(50)
-
+#define INNER_UPDATE_INTERVAL   SECONDS(3)
 // ================= 全局变量 =================
 // 这些变量在 onenet.c 中被 extern 引用，用于模拟传感器数据
 bool led1_state, led2_state, key1_state, key2_state;
@@ -34,7 +35,7 @@ bool led1_state, led2_state, key1_state, key2_state;
 // 【新增】状态改变标志
 extern bool state_changed;
 
-static TimerHandle_t wifi_update_timer,mqtt_update_timer,key_update_timer;
+static TimerHandle_t wifi_update_timer,mqtt_update_timer,key_update_timer,inner_update_timer;
 
 /**
  * @brief WiFi状态更新任务函数
@@ -315,6 +316,39 @@ static void key_update()
     }
 }
 
+static void inner_update()
+{
+	
+	static float last_temperature = 0.0f;
+	static float last_humidity = 0.0f;
+
+	xTimerChangePeriod(inner_update_timer, pdMS_TO_TICKS(INNER_UPDATE_INTERVAL),0);
+
+	if(!aht20_start_measure(aht20))
+	{
+		printf("[AHT20] Measure Error\r\n");
+		return;
+	}
+	if(!aht20_wait_for_measure(aht20))
+	{
+		printf("[AHT20] Wait Error\r\n");
+		return;
+	}
+	float temp=0.0f, humi=0.0f;
+	if(!aht20_read_measurement(aht20,&temp, &humi))
+	{
+		printf("[AHT20] Read Error\r\n");		
+		return;
+	}
+	if(temp==last_temperature && humi==last_humidity)
+	{
+		return;
+	}
+	last_temperature = temp;
+	last_humidity = humi;
+	printf("[AHT20] Temperature: %.1f, Humidity: %.1f\r\n", temp, humi);
+
+}
 
 typedef void (*app_job_t)(void);
 
@@ -340,8 +374,8 @@ void main_loop_init(void)
 	wifi_update_timer = xTimerCreate("wifi_update", pdMS_TO_TICKS(WIFI_UPDATE_INTERVAL), pdTRUE, wifi_update, mloop_timer_cb);
 	mqtt_update_timer = xTimerCreate("mqtt_update", pdMS_TO_TICKS(MQTT_UPDATE_INTERVAL), pdTRUE, mqtt_update, mloop_timer_cb);
 	key_update_timer = xTimerCreate("key_update", pdMS_TO_TICKS(KEY_UPDATE_INTERVAL), pdTRUE, key_update, mloop_timer_cb);
-	
-	if(wifi_update_timer == NULL || mqtt_update_timer == NULL || key_update_timer == NULL)
+	inner_update_timer = xTimerCreate("inner_update", pdMS_TO_TICKS(INNER_UPDATE_INTERVAL), pdTRUE,inner_update, mloop_timer_cb);
+	if(wifi_update_timer == NULL || mqtt_update_timer == NULL || key_update_timer == NULL || inner_update_timer == NULL)
 	{
 		printf("[LOOP] Timer creation failed!\n");
 		return;
@@ -352,11 +386,14 @@ void main_loop_init(void)
 	workqueue_run(app_work, wifi_update);
 	workqueue_run(app_work, mqtt_update);
 	workqueue_run(app_work, key_update);
+    workqueue_run(app_work,inner_update);
 
 	printf("[LOOP] Starting timers...\n");
 	xTimerStart(wifi_update_timer, 0);
 	xTimerStart(mqtt_update_timer, 0);
 	xTimerStart(key_update_timer, 0);
-	
+	xTimerStart(inner_update_timer, 0);
+
+    
 	printf("[LOOP] Initialization complete. Key update interval: %dms\n", KEY_UPDATE_INTERVAL);
 }

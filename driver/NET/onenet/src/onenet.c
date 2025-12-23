@@ -418,6 +418,7 @@ unsigned char OneNet_FillBuf(char *buf)
 	memset(text, 0, sizeof(text));
 	sprintf(text, "\"led2_state\":{\"value\":%s}", led2_state ? "true" : "false");
 	strcat(buf, text);
+	
 
 	strcat(buf, "}}");
 	return strlen(buf);

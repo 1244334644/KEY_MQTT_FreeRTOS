@@ -56,6 +56,10 @@ virtualFolder:
               files:
                 - path: driver/NET/TCP/tcpkit.c
               folders: []
+        - name: aht20
+          files:
+            - path: driver/aht20/aht20.c
+          folders: []
     - name: firmware
       files: []
       folders:
@@ -153,6 +157,7 @@ targets:
         - driver/NET/onenet/inc
         - driver/NET/TCP
         - driver/NET/CJSON
+        - driver/aht20
       libList: []
     excludeList:
       - <virtual_root>/driver/delay/delay.c
