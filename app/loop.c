@@ -480,7 +480,6 @@ static void mloop_timer_cb(TimerHandle_t timer)
 }
 
 
-
 void main_loop_init(void)
 {	
 	printf("[LOOP] Creating timers...\n");
