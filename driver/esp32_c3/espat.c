@@ -407,14 +407,49 @@ static bool parse_cipsntptime_response(const char *response, esp_time_t *date)
 //	OK
 	char weekday_str[8];
 	char month_str[4];
+	
+	// 【调试1】打印原始响应
+	UsartPrintf(USART_DEBUG, "[SNTP] Raw response: %s\r\n", response);
+	
 	response = strstr(response, "+CIPSNTPTIME:");
-	if (sscanf(response, "+CIPSNTPTIME:%3s %3s %hhu %hhu:%hhu:%hhu %hu", 
-			   weekday_str, month_str, 
-			   &date->day, &date->hour, &date->minute, &date->second, &date->year) != 7)
+	if(response == NULL)
+	{
+		UsartPrintf(USART_DEBUG, "[SNTP] ERROR: No +CIPSNTPTIME: found in response\r\n");
 		return false;
+	}
+	
+	// 【调试2】打印提取的时间字符串
+	UsartPrintf(USART_DEBUG, "[SNTP] Time string: %s\r\n", response);
+	
+	int scan_result = sscanf(response, "+CIPSNTPTIME:%3s %3s %hhu %hhu:%hhu:%hhu %hu", 
+			   weekday_str, month_str, 
+			   &date->day, &date->hour, &date->minute, &date->second, &date->year);
+	
+	// 【调试3】打印sscanf结果
+	UsartPrintf(USART_DEBUG, "[SNTP] sscanf result: %d (expected 7)\r\n", scan_result);
+	
+	if(scan_result != 7)
+	{
+		UsartPrintf(USART_DEBUG, "[SNTP] ERROR: sscanf failed, only matched %d fields\r\n", scan_result);
+		return false;
+	}
+	
+	// 【调试4】打印解析出的各个字段
+	UsartPrintf(USART_DEBUG, "[SNTP] Parsed: weekday=%s, month=%s, day=%d, time=%02d:%02d:%02d, year=%d\r\n",
+		weekday_str, month_str, date->day, date->hour, date->minute, date->second, date->year);
 	
 	date->weekday = weekday_str_to_num(weekday_str);
 	date->month = month_str_to_num(month_str);
+	
+	// 【调试5】打印转换后的数值
+	UsartPrintf(USART_DEBUG, "[SNTP] Converted: weekday=%d, month=%d\r\n", date->weekday, date->month);
+	
+	// 【检查】如果月份或星期转换失败（返回0），说明字符串不匹配
+	if(date->month == 0 || date->weekday == 0)
+	{
+		UsartPrintf(USART_DEBUG, "[SNTP] ERROR: Invalid month or weekday string\r\n");
+		return false;
+	}
 	
 	return true;
 }

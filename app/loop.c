@@ -57,6 +57,28 @@ static void time_sync(void)
 
 	uint32_t restart_sync_delay = TIME_SYNC_INTERVAL;
 	rtc_date_time_t rtc_date={0};
+	
+	/**
+	 * 【优化】先检查RTC时间是否有效
+	 * 
+	 * 如果RTC已经有有效时间（年份>=2020），说明之前已经同步过，
+	 * 就不需要频繁查询SNTP，直接使用RTC时间即可。
+	 * 只有在首次启动或RTC时间无效时才查询SNTP。
+	 */
+	rtc_get_time(&rtc_date);
+	if(rtc_date.year >= 2020)
+	{
+		printf("[TIME] RTC time valid: %04d-%02d-%02d %02d:%02d:%02d, skip SNTP query\r\n", 
+			rtc_date.year, rtc_date.month, rtc_date.day, 
+			rtc_date.hour, rtc_date.minute, rtc_date.second);
+		
+		// RTC时间有效，每24小时才同步一次SNTP（保持长期准确）
+		restart_sync_delay = HOURS(24);
+		goto err;
+	}
+	
+	printf("[TIME] RTC time invalid (%d), querying SNTP...\r\n", rtc_date.year);
+	
 	/**
 	 * 获取SNTP网络时间
 	 * 
@@ -67,7 +89,7 @@ static void time_sync(void)
 	if(!espat_sntp_get_time(&esp_date))
 	{
 		printf("[SNTP] Get Time Error\r\n");
-		restart_sync_delay = SECONDS(1);  // 1秒后重试
+		restart_sync_delay = SECONDS(5);  // 5秒后重试（避免频繁查询）
 		goto err;
 	}
 	
@@ -75,12 +97,12 @@ static void time_sync(void)
 	 * 验证时间数据有效性
 	 * 
 	 * 检查获取的网络时间年份是否有效（大于等于2020），
-	 * 如果年份小于2020，说明时间数据异常，设置5秒后重试。
+	 * 如果年份小于2020，说明SNTP还没同步成功，设置5秒后重试。
 	 */
 	if(esp_date.year <2020)
 	{
-		printf("[SNTP] invalid date formate \r\n");
-		restart_sync_delay = SECONDS(1);  // 1秒后重试
+		printf("[SNTP] Waiting for time sync... (got %d, retrying in 5s)\r\n", esp_date.year);
+		restart_sync_delay = SECONDS(5);  // 5秒后重试
 		goto err;
 	}
 
@@ -90,7 +112,7 @@ static void time_sync(void)
 	 * 显示同步成功的网络时间信息，格式：YYYY-MM-DD HH:MM:SS (星期)
 	 * 便于调试和监控时间同步状态。
 	 */
-	printf("[SNTP] Time Sync: %04d-%02d-%02d %02d:%02d:%02d (%d)\r\n", esp_date.year, esp_date.month, 
+	printf("[SNTP] Time Sync Success: %04d-%02d-%02d %02d:%02d:%02d (%d)\r\n", esp_date.year, esp_date.month, 
 		esp_date.day, esp_date.hour, esp_date.minute, esp_date.second, esp_date.weekday);
 	
 	/**
@@ -108,6 +130,9 @@ static void time_sync(void)
 	rtc_date.second = esp_date.second;
 	rtc_date.week = esp_date.weekday;
 	rtc_set_time(&rtc_date);
+	
+	// SNTP同步成功后，24小时才同步一次
+	restart_sync_delay = HOURS(24);
 
 	/**
 	 * 立即触发时间显示更新
