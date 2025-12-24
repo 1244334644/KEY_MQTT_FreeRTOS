@@ -57,6 +57,7 @@ static void time_sync(void)
 
 	uint32_t restart_sync_delay = TIME_SYNC_INTERVAL;
 	rtc_date_time_t rtc_date={0};
+	esp_time_t esp_date={0};  // 【修复警告】提前声明，避免goto跳过初始化
 	
 	/**
 	 * 【优化】先检查RTC时间是否有效
@@ -85,7 +86,6 @@ static void time_sync(void)
 	 * 通过ESP-AT模块向SNTP服务器请求当前网络时间，
 	 * 如果获取失败（返回false），则记录错误并设置5秒后重试。
 	 */
-	esp_time_t esp_date={0};
 	if(!espat_sntp_get_time(&esp_date))
 	{
 		printf("[SNTP] Get Time Error\r\n");
