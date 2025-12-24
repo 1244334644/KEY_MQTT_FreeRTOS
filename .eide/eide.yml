@@ -16,7 +16,43 @@ virtualFolder:
         - path: app/work_queue.c
         - path: app/loop.c
         - path: app/weather.c
-      folders: []
+        - path: app/ui.c
+      folders:
+        - name: font
+          files:
+            - path: app/font/font16.c
+            - path: app/font/font20.c
+            - path: app/font/font24.c
+            - path: app/font/font32.c
+            - path: app/font/font54.c
+            - path: app/font/font64.c
+            - path: app/font/font76.c
+          folders: []
+        - name: image
+          files:
+            - path: app/img/error.c
+            - path: app/img/icon_duoyun.c
+            - path: app/img/icon_leizhenyu.c
+            - path: app/img/icon_na.c
+            - path: app/img/icon_qing.c
+            - path: app/img/icon_wenduji.c
+            - path: app/img/icon_wifi.c
+            - path: app/img/icon_yintian.c
+            - path: app/img/icon_yueliang.c
+            - path: app/img/icon_zhongxue.c
+            - path: app/img/icon_zhongyu.c
+            - path: app/img/img_wifi.c
+            - path: app/img/nowifi.c
+            - path: app/img/welcome.c
+            - path: app/img/wifi_fill.c
+          folders: []
+        - name: page
+          files:
+            - path: app/page/error_page.c
+            - path: app/page/main_page.c
+            - path: app/page/welcome_page.c
+            - path: app/page/wifi_page.c
+          folders: []
     - name: driver
       files: []
       folders:
@@ -64,6 +100,14 @@ virtualFolder:
         - name: tim_delay
           files:
             - path: driver/tim_delay/tim_delay.c
+          folders: []
+        - name: LCD
+          files:
+            - path: driver/LCD/LCD.c
+          folders: []
+        - name: rtc
+          files:
+            - path: driver/rtc/rtc.c
           folders: []
     - name: firmware
       files: []
@@ -164,6 +208,11 @@ targets:
         - driver/NET/CJSON
         - driver/aht20
         - driver/tim_delay
+        - driver/LCD
+        - app/font
+        - app/img
+        - app/page
+        - driver/rtc
       libList: []
     excludeList:
       - <virtual_root>/driver/delay/delay.c

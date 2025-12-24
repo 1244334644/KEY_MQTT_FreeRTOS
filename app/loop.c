@@ -15,7 +15,8 @@
 #include "onenet.h"
 #include "loop.h"
 #include "weather.h"
-
+#include "page.h"
+#include "rtc.h"
 
 #define MILLISECONDS(x) (x)
 #define SECONDS(x)  		MILLISECONDS((x) * 1000)
@@ -24,7 +25,8 @@
 #define DAYS(x)    		HOURS((x) * 24)
 
 
-
+#define TIME_SYNC_INTERVAL   HOURS(1)
+#define TIME_UPDATE_INTERVAL   SECONDS(1)
 #define WIFI_UPDATE_INTERVAL   SECONDS(5)
 #define MQTT_UPDATE_INTERVAL   MILLISECONDS(200)  // 【关键优化】从1秒改为200ms，快速响应
 #define KEY_UPDATE_INTERVAL   MILLISECONDS(50)
@@ -46,7 +48,79 @@ extern char g_location[128];
 extern int weather_code;
 
 
-static TimerHandle_t wifi_update_timer,mqtt_update_timer,key_update_timer,inner_update_timer,outdoor_update_timer;
+static TimerHandle_t wifi_update_timer,mqtt_update_timer,key_update_timer,inner_update_timer,outdoor_update_timer,time_sync_timer,time_update_timer;
+
+
+
+static void time_sync(void)
+{
+
+	uint32_t restart_sync_delay = TIME_SYNC_INTERVAL;
+	rtc_date_time_t rtc_date={0};
+	/**
+	 * 获取SNTP网络时间
+	 * 
+	 * 通过ESP-AT模块向SNTP服务器请求当前网络时间，
+	 * 如果获取失败（返回false），则记录错误并设置5秒后重试。
+	 */
+	esp_time_t esp_date={0};
+	if(!espat_sntp_get_time(&esp_date))
+	{
+		printf("[SNTP] Get Time Error\r\n");
+		restart_sync_delay = SECONDS(1);  // 1秒后重试
+		goto err;
+	}
+	
+	/**
+	 * 验证时间数据有效性
+	 * 
+	 * 检查获取的网络时间年份是否有效（大于等于2020），
+	 * 如果年份小于2020，说明时间数据异常，设置5秒后重试。
+	 */
+	if(esp_date.year <2020)
+	{
+		printf("[SNTP] invalid date formate \r\n");
+		restart_sync_delay = SECONDS(1);  // 1秒后重试
+		goto err;
+	}
+
+	/**
+	 * 打印时间同步成功信息
+	 * 
+	 * 显示同步成功的网络时间信息，格式：YYYY-MM-DD HH:MM:SS (星期)
+	 * 便于调试和监控时间同步状态。
+	 */
+	printf("[SNTP] Time Sync: %04d-%02d-%02d %02d:%02d:%02d (%d)\r\n", esp_date.year, esp_date.month, 
+		esp_date.day, esp_date.hour, esp_date.minute, esp_date.second, esp_date.weekday);
+	
+	/**
+	 * 设置RTC实时时钟
+	 * 
+	 * 将网络时间转换为RTC时间格式，并写入硬件RTC芯片，
+	 * 确保系统断电后仍能保持准确时间。
+	 */
+	
+	rtc_date.year = esp_date.year;
+	rtc_date.month = esp_date.month;
+	rtc_date.day = esp_date.day;
+	rtc_date.hour = esp_date.hour;
+	rtc_date.minute = esp_date.minute;
+	rtc_date.second = esp_date.second;
+	rtc_date.week = esp_date.weekday;
+	rtc_set_time(&rtc_date);
+
+	/**
+	 * 立即触发时间显示更新
+	 * 
+	 * 设置time_update_delay为0，确保时间显示任务立即执行，
+	 * 将新同步的时间显示在LCD屏幕上。
+	 * 
+	 * 注意：这里设置为0而不是10，确保时间更新立即执行，
+	 * 避免用户看到旧的时间信息。
+	 */
+err:
+	xTimerChangePeriod(time_sync_timer, pdMS_TO_TICKS(restart_sync_delay),0);
+}
 
 /**
  * @brief WiFi状态更新任务函数
@@ -170,16 +244,44 @@ static void wifi_update()
 	
 }
 
+static void time_update()
+{
+	static rtc_date_time_t last_date={0};
+	xTimerChangePeriod(time_update_timer, pdMS_TO_TICKS(TIME_UPDATE_INTERVAL),0);
+
+	rtc_date_time_t date={0};
+	rtc_get_time(&date);
+	
+	if(memcmp(&last_date, &date, sizeof(rtc_date_time_t)) == 0)
+	{
+		return;
+	}
+
+	memcpy(&last_date, &date, sizeof(rtc_date_time_t));
+	main_page_redraw_time(lcd,&date);
+	main_page_redraw_date(lcd,&date);
+	
+}
 
 static void mqtt_update()
 {
     static bool mqtt_connected = false;
     static uint32_t last_send_time = 0;
     static uint32_t last_connect_time = 0;
+    static uint32_t send_fail_count = 0;  // 【新增】发送失败计数
     static const uint32_t connect_retry_interval = 5000;  // 连接重试间隔5秒
     
     unsigned char *dataPtr = NULL;
     uint32_t current_time = xTaskGetTickCount();
+    
+    // 【新增】如果连续发送失败超过3次，标记为断开连接
+    if(send_fail_count >= 3)
+    {
+        printf("[MQTT] Too many send failures (%d), marking as disconnected\n", send_fail_count);
+        mqtt_connected = false;
+        send_fail_count = 0;
+        return;
+    }
     
     // 1. 检查MQTT连接状态（避免频繁连接）
     if(!mqtt_connected)
@@ -191,6 +293,7 @@ static void mqtt_update()
             {
                 printf("OneNet Connected.\n");
                 mqtt_connected = true;
+                send_fail_count = 0;  // 【重要】连接成功后清零失败计数
                 OneNET_Subscribe();
                 last_connect_time = current_time;
             }
@@ -218,11 +321,11 @@ static void mqtt_update()
     {
         printf("[MQTT] Processed %d msgs, report now\n", msg_count);
         
-        // 【关键优化】确保距离上次发送至少150ms，避免ESP32发送失败
+        // 【关键优化】确保距离上次发送至少300ms，避免ESP32发送失败
         uint32_t time_since_last = xTaskGetTickCount() - last_send_time;
-        if(time_since_last < pdMS_TO_TICKS(150))
+        if(time_since_last < pdMS_TO_TICKS(300))
         {
-            uint32_t wait_time = 150 - (time_since_last * portTICK_PERIOD_MS);
+            uint32_t wait_time = 300 - (time_since_last * portTICK_PERIOD_MS);
             printf("[MQTT] Wait %dms before send (avoid ESP32 overload)\n", wait_time);
             vTaskDelay(pdMS_TO_TICKS(wait_time));
         }
@@ -239,8 +342,8 @@ static void mqtt_update()
     // 3. 【关键优化】检查本地状态改变标志（按键操作），立即上报
     if(state_changed)
     {
-        // 【优化】确保至少150ms间隔，避免ESP32发送失败
-        if((current_time - last_send_time) >= pdMS_TO_TICKS(150))
+        // 【优化】确保至少300ms间隔，避免ESP32发送失败
+        if((current_time - last_send_time) >= pdMS_TO_TICKS(300))
         {
             printf("[MQTT] Local state changed, report\n");
             OneNet_SendData();
@@ -285,12 +388,15 @@ static void key_update()
     {
         if(!key1_pressed)
         {
+            uint32_t press_time = xTaskGetTickCount();  // 记录按键时刻
             key1_pressed = true;
             key1_state = 1;
             led_toggle(led1);
             led1_state = !led1_state;
             state_changed = true;  // 【关键】设置状态改变标志
-            printf("Key1 pressed, LED1=%d, state_changed=true\n", led1_state);
+            uint32_t toggle_time = xTaskGetTickCount() - press_time;  // 计算LED响应时间
+            printf("[KEY] Key1 pressed, LED1=%d, response_time=%dms, state_changed=true\n", 
+                led1_state, toggle_time);
         }
     }
     else
@@ -299,7 +405,7 @@ static void key_update()
         {
             key1_pressed = false;
             key1_state = 0;
-            printf("Key1 Released\n");
+            printf("[KEY] Key1 Released\n");
         }
     }
 
@@ -367,7 +473,8 @@ static void inner_update()
 	printf("[AHT20] Temperature: %.1f, Humidity: %.1f\r\n", temp, humi);
 	printf("[UPDATE] Inner: %.1f°C %.1f%%, Outer: %.1f°C, Weather: %d\r\n", 
 		g_inner_temp, g_inner_humi, g_temperature, weather_code);
-
+    main_page_redraw_inner_temp(lcd,temp);
+	main_page_redraw_inner_humi(lcd,humi);
 }
 
 static void outdoor_update()
@@ -461,7 +568,9 @@ static void outdoor_update()
 	
 	printf("[WEATHER] %s %s %.1f°C (code=%d)\n", 
 		g_city, weather.weather, g_temperature, weather_code);
-
+        
+	main_page_redraw_outdoor_temp(lcd, weather.temperature);
+	main_page_redraw_outdoor_weather_icon(lcd, weather.weather_code);
 }
 
 typedef void (*app_job_t)(void);
@@ -475,15 +584,35 @@ static void app_work(void *param)
 static void mloop_timer_cb(TimerHandle_t timer)
 {
 	app_job_t job=(app_job_t)pvTimerGetTimerID(timer);
-	workqueue_run(app_work,job);
+	
+	// 【关键优化】只将最快的任务直接执行，避免栈溢出
+	// key_update: ~1ms（仅GPIO读取和LED切换，栈消耗很小）
+	if(job == key_update)
+	{
+		job();  // 直接执行，延迟 < 1ms，避免队列阻塞
+	}
+	else
+	{
+		// 其他任务（mqtt_update, wifi_update, inner_update, outdoor_update）放入队列
+		// mqtt_update虽然需要快速响应，但函数较复杂，可能导致栈溢出
+		workqueue_run(app_work, job);
+	}
 	
 }
 
+static void timer_update_cb(TimerHandle_t timer)
+{
+	app_job_t job=(app_job_t)pvTimerGetTimerID(timer);
+	job();
+	
+}
 
 void main_loop_init(void)
 {	
 	printf("[LOOP] Creating timers...\n");
-	
+
+	time_update_timer = xTimerCreate("time_update", pdMS_TO_TICKS(TIME_UPDATE_INTERVAL), pdTRUE,time_update, timer_update_cb);
+	time_sync_timer = xTimerCreate("time_sync", pdMS_TO_TICKS(200), pdFALSE,time_sync, mloop_timer_cb);
 	wifi_update_timer = xTimerCreate("wifi_update", pdMS_TO_TICKS(WIFI_UPDATE_INTERVAL), pdTRUE, wifi_update, mloop_timer_cb);
 	mqtt_update_timer = xTimerCreate("mqtt_update", pdMS_TO_TICKS(MQTT_UPDATE_INTERVAL), pdTRUE, mqtt_update, mloop_timer_cb);
 	key_update_timer = xTimerCreate("key_update", pdMS_TO_TICKS(KEY_UPDATE_INTERVAL), pdTRUE, key_update, mloop_timer_cb);
@@ -498,6 +627,8 @@ void main_loop_init(void)
 	printf("[LOOP] Timers created successfully\n");
 	
 	printf("[LOOP] Running initial tasks...\n");
+
+    workqueue_run(app_work,time_sync);
 	workqueue_run(app_work, wifi_update);
 	workqueue_run(app_work, mqtt_update);
 	workqueue_run(app_work, key_update);
@@ -505,6 +636,9 @@ void main_loop_init(void)
     workqueue_run(app_work,outdoor_update);
 
 	printf("[LOOP] Starting timers...\n");
+
+    xTimerStart(time_update_timer, 0);
+	xTimerStart(time_sync_timer, 0);
 	xTimerStart(wifi_update_timer, 0);
 	xTimerStart(mqtt_update_timer, 0);
 	xTimerStart(key_update_timer, 0);

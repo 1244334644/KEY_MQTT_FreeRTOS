@@ -38,14 +38,12 @@ typedef struct
 
 
 static void espat_usart_write(const char *data);
-static bool espat_wait_boot(uint32_t timeout);
+// static bool espat_wait_boot(uint32_t timeout);
 bool espat_wait_ready(uint32_t timeout);
 static at_ack_t espat_usart_wait_receive(uint32_t timeout);
 // 【优化】增大缓冲区到512字节，防止MQTT消息被截断
 unsigned char esp32_buf[512];
 unsigned short esp32_cnt = 0, esp32_cntPre = 0;
-static uint32_t rxlen;
-static const char *rxline; 
 
 static const at_ack_match_t at_ack_matches[]=
 {
@@ -68,8 +66,6 @@ void ESP32_Clear(void)
 	esp32_cnt = 0;
 
 }
-static at_ack_t  rxack;
-static SemaphoreHandle_t espat_ack_semaphore;
 
 static void espat_io_init(void)
 {
@@ -148,7 +144,7 @@ static void espat_lowlevel_init()
 
 bool espat_init()
 {
-    espat_ack_semaphore = xSemaphoreCreateBinary();
+    // espat_ack_semaphore = xSemaphoreCreateBinary();
     // 这里的断言可能会在重复初始化时报错，建议去掉或判空
     // configASSERT(espat_ack_semaphore); 
     
@@ -226,15 +222,15 @@ void espat_usart_write_data(const char *data, uint16_t len)
     // 必须等待发送完成
     while(DMA_GetFlagStatus(DMA1_Stream6, DMA_FLAG_TCIF6) == RESET);
 }
-static at_ack_t match_internal_ack(const char *str)
-{
-    for(uint32_t i=0;i<ARRAY_SIZE(at_ack_matches);i++)
-    {
-        if(strcmp(str,at_ack_matches[i].string)==0)
-            return at_ack_matches[i].ack;
-    }
-    return AT_ACK_NONE;
-}
+// static at_ack_t match_internal_ack(const char *str)
+// {
+//     for(uint32_t i=0;i<ARRAY_SIZE(at_ack_matches);i++)
+//     {
+//         if(strcmp(str,at_ack_matches[i].string)==0)
+//             return at_ack_matches[i].ack;
+//     }
+//     return AT_ACK_NONE;
+// }
 
 
 static at_ack_t espat_usart_wait_receive(uint32_t timeout)
@@ -361,14 +357,81 @@ const char *espat_get_response(void)
     return rxbuf;
 }
 
-static bool espat_wait_boot(uint32_t timeout)
+// static bool espat_wait_boot(uint32_t timeout)
+// {
+//     for(int t =0;t<timeout;t+=100)
+//     {
+//         if(espat_write_command("AT\r\n",100))
+//             return true;
+//     }
+//     return false;
+// }
+bool espat_sntp_init()
 {
-    for(int t =0;t<timeout;t+=100)
-    {
-        if(espat_write_command("AT\r\n",100))
-            return true;
-    }
-    return false;
+    if(!espat_write_command("AT+CIPSNTPCFG=1,8\r\n", 2000))
+        return false;
+
+    return true;
+
+}
+
+static uint8_t month_str_to_num(const char *month_str)
+{
+	const char *months[] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun", 
+		"Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
+	for (uint8_t i = 0; i < 12; i++)
+	{
+		if (strcmp(month_str, months[i]) == 0)
+		{
+			return i + 1;
+		}
+	}
+	return 0;
+}
+static uint8_t weekday_str_to_num(const char *weekday_str)
+{
+	const char *weekdays[] = {"Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"};
+	for (uint8_t i = 0; i < 7; i++) {
+		if (strcmp(weekday_str, weekdays[i]) == 0)
+		{
+			return i + 1;
+		}
+	}
+	return 0;
+}
+
+static bool parse_cipsntptime_response(const char *response, esp_time_t *date)
+{
+//	AT+CIPSNTPTIME?
+//	+CIPSNTPTIME:Sun Jul 27 14:07:19 2025
+//	OK
+	char weekday_str[8];
+	char month_str[4];
+	response = strstr(response, "+CIPSNTPTIME:");
+	if (sscanf(response, "+CIPSNTPTIME:%3s %3s %hhu %hhu:%hhu:%hhu %hu", 
+			   weekday_str, month_str, 
+			   &date->day, &date->hour, &date->minute, &date->second, &date->year) != 7)
+		return false;
+	
+	date->weekday = weekday_str_to_num(weekday_str);
+	date->month = month_str_to_num(month_str);
+	
+	return true;
+}
+
+
+bool espat_sntp_get_time(esp_time_t *time)
+{
+    if(!espat_write_command("AT+CIPSNTPTIME?\r\n", 2000))
+        return false;
+    if(!parse_cipsntptime_response(espat_get_response(), time))
+        return false;
+
+
+
+    return true;
+
+
 }
 
 bool espat_wifi_init()
@@ -500,47 +563,62 @@ void esp32_SendData(unsigned char *data, unsigned short len)
 {
     char cmdBuf[32];
     
-    // 【优化】发送前先清空缓存，但不要清空正在接收的数据
-    // 只在确认没有正在接收数据时才清空
-    if(esp32_cnt == 0 || esp32_cnt == esp32_cntPre) {
-        ESP32_Clear();
+    // 【诊断1】打印当前缓冲区状态
+    UsartPrintf(USART_DEBUG, "[ESP32] Buffer: cnt=%d, cntPre=%d\r\n", esp32_cnt, esp32_cntPre);
+    
+    // 【优化1】发送前延迟，但时间缩短到10ms（50ms太长）
+    vTaskDelay(pdMS_TO_TICKS(10));
+    
+    // 【优化2】强制清空缓存，确保没有残留数据干扰
+    ESP32_Clear();
+    
+    // 【诊断2】先测试ESP32是否响应（发送AT测试命令）
+    if(!espat_write_command("AT\r\n", 1000))
+    {
+        UsartPrintf(USART_DEBUG, "[ESP32] ERROR: ESP32 not responding to AT command!\r\n");
+        // ESP32可能死机，尝试等待恢复
+        vTaskDelay(pdMS_TO_TICKS(100));
+        return;
     }
     
     sprintf(cmdBuf, "AT+CIPSEND=%d\r\n", len);
     
-    // 1. 【优化】增加重试机制，最多重试2次
+    // 【优化3】增加重试机制，最多重试3次
     int retry_count = 0;
     bool send_success = false;
     
-    while(retry_count < 2 && !send_success)
+    while(retry_count < 3 && !send_success)
     {
         // 发送命令，等待 >
-        if(espat_write_command(cmdBuf, 3000))
+        if(espat_write_command(cmdBuf, 5000))  // 【优化】超时时间从3000增加到5000
         {
-            // 2. 收到 > 后，发送 MQTT 数据包
+            // 收到 > 后，发送 MQTT 数据包
             espat_usart_write_data((char*)data, len); 
 
-            // 3. 【优化】发送完数据后，等待"SEND OK"确认
-            // 增加延迟到300ms，确保数据完全发送成功
+            // 【优化4】发送完数据后，等待"SEND OK"确认
+            // 延迟时间改为300ms（500ms太长）
             vTaskDelay(pdMS_TO_TICKS(300));
             send_success = true;
             
-            UsartPrintf(USART_DEBUG, "MQTT data sent successfully\r\n");
+            UsartPrintf(USART_DEBUG, "[ESP32] Data sent successfully\r\n");
         }
         else
         {
-            UsartPrintf(USART_DEBUG, "WARN: Wait > failed, retry %d\r\n", retry_count);
+            UsartPrintf(USART_DEBUG, "[ESP32] WARN: Wait > failed, retry %d\r\n", retry_count);
             retry_count++;
             
-            if(retry_count < 2) {
-                vTaskDelay(pdMS_TO_TICKS(100)); // 重试前短暂延迟
+            if(retry_count < 3) {
+                // 【优化5】重试前延迟100ms
+                vTaskDelay(pdMS_TO_TICKS(100));
                 ESP32_Clear(); // 清空可能的残留数据
             }
         }
     }
     
     if(!send_success) {
-        UsartPrintf(USART_DEBUG, "ERROR: MQTT data send failed after retries\r\n");
+        UsartPrintf(USART_DEBUG, "[ESP32] ERROR: Data send failed after %d retries\r\n", retry_count);
+        // 【关键】发送失败后，标记MQTT需要重连
+        UsartPrintf(USART_DEBUG, "[ESP32] WARNING: TCP connection may be broken, need reconnect\r\n");
     }
 }
 bool ESP32_WaitRecive(void)

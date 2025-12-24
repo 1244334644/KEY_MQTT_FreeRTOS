@@ -15,7 +15,9 @@
 #include "aht20.h"
 #include "aht20_desc.h"
 #include "tim_delay.h"
-
+#include "LCD.h"
+#include "LCD_desc.h"
+#include "rtc.h"
 
 
 static struct led_desc led1_desc = 
@@ -83,6 +85,22 @@ static struct aht20_desc aht20_desc =
 };
 aht20_desc_t aht20 = &aht20_desc;
 
+static struct lcd_desc lcd_desc = 
+{
+	.SPI = SPI2,
+	.Port = GPIOB,
+	.RSTPin = GPIO_Pin_9,
+	.DCPin = GPIO_Pin_10,
+	.CSPin = GPIO_Pin_12,
+	.BLPin = GPIO_Pin_0,
+	.SCKPin = GPIO_Pin_13,
+	.MOSIPin = GPIO_Pin_15,
+	.SCKPinsource = GPIO_PinSource13,
+	.MOSIPinsource = GPIO_PinSource15,
+	.CSPinsource = GPIO_PinSource10,
+};
+lcd_desc_t lcd = &lcd_desc;
+
 
 void board_init(void)
 {
@@ -95,18 +113,22 @@ void board_init(void)
 	NVIC_PriorityGroupConfig(NVIC_PriorityGroup_4);	//中断控制器分组设置
 	RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_DMA1, ENABLE); 
 	RCC_APB1PeriphClockCmd(RCC_APB1Periph_I2C1, ENABLE);
+	RCC_APB1PeriphClockCmd(RCC_APB1Periph_SPI2, ENABLE);
 	PWR_BackupAccessCmd(ENABLE);
 	RCC_LSEConfig(RCC_LSE_ON);
 	while (RCC_GetFlagStatus(RCC_FLAG_LSERDY) == RESET);
 	RCC_RTCCLKConfig(RCC_RTCCLKSource_LSE);
 
 	tim_delay_init();
+	rtc_init();
     led_init(led1);
     led_init(led2);
     key_init(key1);
     key_init(key2);
     usart_init(usart1);
 	aht20_Init(aht20);
+	lcd_init(lcd);
+	
 }
 
 

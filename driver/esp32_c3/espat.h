@@ -36,4 +36,5 @@ unsigned char *ESP32_GetIPD(unsigned short timeOut);
 bool espat_write_command(const char *command, uint32_t timeout);
 void espat_usart_write_data(const char *data, uint16_t len);
 const char *espat_http_get(const char *url, const char *response);
+bool espat_sntp_get_time(esp_time_t *time);
 #endif /* __ESPat_H__ */
