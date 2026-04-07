@@ -402,6 +402,9 @@ float g_temperature = 0.0f;
 
 float g_inner_temp = 0.0f;
 float g_inner_humi = 0.0f;
+float g_temp_over = 25.0f;
+float g_humi_over = 60.0f;
+
 int weather_code = 0; // 天气代码，0=晴天，1=多云，2=雨天，3=雪天
 
 unsigned char OneNet_FillBuf(char *buf)
@@ -423,6 +426,15 @@ unsigned char OneNet_FillBuf(char *buf)
 	
 	memset(text, 0, sizeof(text));
 	sprintf(text, "\"inner_humi\":{\"value\":%.1f},", g_inner_humi);
+	strcat(buf, text);
+
+	// ========== 设置温湿度上限（AHT20传感器数据）==========
+	memset(text, 0, sizeof(text));
+	sprintf(text, "\"temp_over\":{\"value\":%.1f},", g_temp_over);
+	strcat(buf, text);
+	
+	memset(text, 0, sizeof(text));
+	sprintf(text, "\"humi_over\":{\"value\":%.1f},", g_humi_over);
 	strcat(buf, text);
 	
 	// ========== LED状态 ==========
@@ -659,7 +671,71 @@ void OneNet_RevPro(unsigned char *cmd)
 				
 				cJSON *led1_json = cJSON_GetObjectItem(params_json,"led1_state");
 				cJSON *led2_json = cJSON_GetObjectItem(params_json,"led2_state");
-				
+				cJSON *temp_over_json = cJSON_GetObjectItem(params_json, "temp_over");
+				cJSON *humi_over_json = cJSON_GetObjectItem(params_json, "humi_over");
+
+				// =================处理温度上限设置=================
+				if(temp_over_json != NULL)
+				{
+					double val = 0;
+					bool valid = false;
+
+					// 1. 直接数值格式: {"temp_over": 30.5}
+					if(temp_over_json->type == cJSON_Number)
+					{
+						val = temp_over_json->valuedouble;
+						valid = true;
+					}
+					// 2. 嵌套对象格式: {"temp_over": {"value": 30.5}}
+					else if(temp_over_json->type == cJSON_Object)
+					{
+						cJSON *value_obj = cJSON_GetObjectItem(temp_over_json, "value");
+						if(value_obj != NULL && value_obj->type == cJSON_Number)
+						{
+							val = value_obj->valuedouble;
+							valid = true;
+						}
+					}
+
+					if(valid)
+					{
+						g_temp_over = (float)val;
+						UsartPrintf(USART_DEBUG, "[CMD] Set Temp Limit: %.1f\r\n", g_temp_over);
+						// 立即触发上报以同步状态
+						// extern bool state_changed; 
+						// state_changed = true; 
+					}
+				}
+
+				// =================处理湿度上限设置=================
+				if(humi_over_json != NULL)
+				{
+					double val = 0;
+					bool valid = false;
+
+					// 1. 直接数值格式
+					if(humi_over_json->type == cJSON_Number)
+					{
+						val = humi_over_json->valuedouble;
+						valid = true;
+					}
+					// 2. 嵌套对象格式
+					else if(humi_over_json->type == cJSON_Object)
+					{
+						cJSON *value_obj = cJSON_GetObjectItem(humi_over_json, "value");
+						if(value_obj != NULL && value_obj->type == cJSON_Number)
+						{
+							val = value_obj->valuedouble;
+							valid = true;
+						}
+					}
+
+					if(valid)
+					{
+						g_humi_over = (float)val;
+						UsartPrintf(USART_DEBUG, "[CMD] Set Humi Limit: %.1f\r\n", g_humi_over);
+					}
+				}
 				// 处理LED1
 				if(led1_json != NULL)
 				{

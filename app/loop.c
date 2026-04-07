@@ -43,6 +43,8 @@ extern bool state_changed;
 extern float g_temperature;
 extern float g_inner_temp;
 extern float g_inner_humi;
+extern float g_temp_over;
+extern float g_humi_over;
 extern char g_city[32];
 extern char g_location[128];
 extern int weather_code;
@@ -494,7 +496,18 @@ static void inner_update()
 	// 【关键修复】更新全局变量，供OneNet_FillBuf使用
 	g_inner_temp = temp;
 	g_inner_humi = humi;
-	
+	if(temp>g_temp_over||humi>g_humi_over)
+	{
+		led_on(led1);
+		led1_state = 1;
+		state_changed = true;  // 【关键】设置状态改变标志
+	}
+	else
+	{
+		led_off(led1);
+		led1_state = 0;
+		state_changed = true;  // 【关键】设置状态改变标志
+	}
 	printf("[AHT20] Temperature: %.1f, Humidity: %.1f\r\n", temp, humi);
 	printf("[UPDATE] Inner: %.1f°C %.1f%%, Outer: %.1f°C, Weather: %d\r\n", 
 		g_inner_temp, g_inner_humi, g_temperature, weather_code);
