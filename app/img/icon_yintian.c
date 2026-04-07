@@ -369,8 +369,10 @@ const unsigned char gImage_icon_yintian[5832] = { /* 0X10,0X10,0X00,0X36,0X00,0X
 
 const img_t img_yintian =
 {
+    .img_id = IMG_YINTIAN,
     .width =54,
     .height=54,
     .data = gImage_icon_yintian,
+    .img_size = sizeof(gImage_icon_yintian),
 }; 
 

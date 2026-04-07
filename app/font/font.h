@@ -20,7 +20,8 @@ typedef struct
     const uint8_t *ascii_model;
     const char *ascii_map;
     const font_chinese_t *chinese;
-
+    const uint32_t font_ascii_size;
+    const uint32_t font_chinese_size;
 } font_t;
 
 extern const font_t font16;

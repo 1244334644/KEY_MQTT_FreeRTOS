@@ -1,4 +1,5 @@
 #include <stdint.h>
+#include <stdio.h>
 #include "font.h"
 
 static const uint8_t ascii_model[] = {
@@ -194,4 +195,6 @@ const font_t font54 =
     .size = 54,
     .ascii_map = "0123456789: -",
     .ascii_model = ascii_model,
+    .chinese = NULL,
+    .font_ascii_size = sizeof(ascii_model),
 };

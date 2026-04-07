@@ -39,13 +39,13 @@ typedef struct
             const char *str;
             uint16_t color;
             uint16_t bg_color;
-            const font_t *font;
+            uint8_t font_size;  // 改为 font_size
         } write_string;
         struct
         {
             uint16_t x;
             uint16_t y;
-            const img_t *img;
+            img_id_t img_id;
         } draw_image;
     };
 }ui_message_t;
@@ -69,12 +69,12 @@ static void ui_func(void *param)
                 msg.fill_color.width, msg.fill_color.height, msg.fill_color.color);
             break;
         case UI_ACTION_WRITE_STRING:
-            st7789_write_string(lcd, msg.write_string.x, msg.write_string.y, msg.write_string.str, 
-                msg.write_string.color, msg.write_string.bg_color, msg.write_string.font);
+            st7789_write_string_w25q16(w25q16, lcd, msg.write_string.x, msg.write_string.y, msg.write_string.str, 
+                msg.write_string.color, msg.write_string.bg_color, msg.write_string.font_size);
             vPortFree((void*)msg.write_string.str);
             break;
         case UI_ACTION_DRAW_IMAGE:
-            st7789_draw_image(lcd, msg.draw_image.x, msg.draw_image.y, msg.draw_image.img);
+            w25q16_show_img(w25q16,lcd, msg.draw_image.x, msg.draw_image.y, msg.draw_image.img_id);
             break;
         default:
             printf("ui_func: unknown action %d\n", msg.action);
@@ -103,7 +103,7 @@ void ui_fill_color(lcd_desc_t lcd, uint16_t x1, uint16_t y1, uint16_t x2, uint16
     xQueueSend(ui_queue, &ui_msg, 0);
 
 }
-void ui_write_string(lcd_desc_t lcd, uint16_t x, uint16_t y,const char *str, uint16_t color, uint16_t bg_color,const font_t *font)
+void ui_write_string(lcd_desc_t lcd, uint16_t x, uint16_t y,const char *str, uint16_t color, uint16_t bg_color, uint8_t font_size)
 {
     char *pstr = pvPortMalloc(strlen(str)+1);
     if(pstr == NULL)
@@ -121,18 +121,18 @@ void ui_write_string(lcd_desc_t lcd, uint16_t x, uint16_t y,const char *str, uin
     ui_msg.write_string.str = pstr;
     ui_msg.write_string.color = color;
     ui_msg.write_string.bg_color = bg_color;
-    ui_msg.write_string.font = font;
+    ui_msg.write_string.font_size = font_size;
 
     xQueueSend(ui_queue, &ui_msg, 0);
 
 }
-void ui_draw_image(lcd_desc_t lcd, uint16_t x, uint16_t y, const img_t *img)
+void ui_draw_image(lcd_desc_t lcd, uint16_t x, uint16_t y, img_id_t img_id)
 {
     ui_message_t ui_msg;
     ui_msg.action = UI_ACTION_DRAW_IMAGE;
     ui_msg.draw_image.x = x;
     ui_msg.draw_image.y = y;
-    ui_msg.draw_image.img = img;
+    ui_msg.draw_image.img_id = img_id;
     xQueueSend(ui_queue, &ui_msg, 0);
 
 }

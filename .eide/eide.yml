@@ -109,6 +109,11 @@ virtualFolder:
           files:
             - path: driver/rtc/rtc.c
           folders: []
+        - name: w25q16
+          files:
+            - path: driver/w25q16/w25q16.c
+            - path: driver/w25q16/w25q16_burn.c
+          folders: []
     - name: firmware
       files: []
       folders:
@@ -213,9 +218,12 @@ targets:
         - app/img
         - app/page
         - driver/rtc
+        - driver/w25q16
       libList: []
     excludeList:
       - <virtual_root>/driver/delay/delay.c
+    settings:
+      debugger: cortex-debug
     toolchain: AC5
     toolchainConfigMap:
       AC5:

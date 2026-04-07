@@ -372,7 +372,9 @@ const unsigned char gImage_icon_na[5832] = { /* 0X10,0X10,0X00,0X36,0X00,0X36,0X
 
 const img_t img_na =
 {
+    .img_id = IMG_NA,
     .width =54,
     .height=54,
     .data = gImage_icon_na,
+    .img_size = sizeof(gImage_icon_na),
 }; 

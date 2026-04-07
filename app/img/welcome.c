@@ -9607,7 +9607,9 @@ static const unsigned char gImage_welcome[153600] = { /* 0X10,0X10,0X00,0XF0,0X0
 
 const img_t img_welcome =
 {
+    .img_id = IMG_WELCOME,
     .width =240,
     .height=320,
     .data = gImage_welcome,
+    .img_size = sizeof(gImage_welcome),
 };    

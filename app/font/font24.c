@@ -332,4 +332,6 @@ const font_t font24 =
     .size = 24,
     .ascii_model = ascii_model,
     .chinese = chinese_font,
+    .font_ascii_size = sizeof(ascii_model),
+    .font_chinese_size = sizeof(chinese_font),
 };

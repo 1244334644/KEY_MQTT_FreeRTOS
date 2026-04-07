@@ -18,7 +18,8 @@
 #include "LCD.h"
 #include "LCD_desc.h"
 #include "rtc.h"
-
+#include "w25q16.h"
+#include "w25q16_desc.h"
 
 static struct led_desc led1_desc = 
 {
@@ -101,6 +102,23 @@ static struct lcd_desc lcd_desc =
 };
 lcd_desc_t lcd = &lcd_desc;
 
+static struct w25q16_desc w25q16_desc = 
+{
+	.SPI = SPI1,
+	.GPort = GPIOB,
+	.CS_Pin = GPIO_Pin_0,
+	.SCK_Pin = GPIO_Pin_3,
+	.MOSI_Pin = GPIO_Pin_5,
+	.MISO_Pin = GPIO_Pin_4,
+	.CS_Pinsource = GPIO_PinSource0,
+	.SCK_Pinsource = GPIO_PinSource3,
+	.MOSI_Pinsource = GPIO_PinSource5,
+	.MISO_Pinsource = GPIO_PinSource4,
+
+};
+w25q16_desc_t w25q16 = &w25q16_desc;
+
+
 
 void board_init(void)
 {
@@ -112,7 +130,9 @@ void board_init(void)
 	RCC_APB1PeriphClockCmd(RCC_APB1Periph_TIM6, ENABLE);
 	NVIC_PriorityGroupConfig(NVIC_PriorityGroup_4);	//中断控制器分组设置
 	RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_DMA1, ENABLE); 
+	RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_DMA2, ENABLE);  // 添加这行！SPI1 使用 DMA2
 	RCC_APB1PeriphClockCmd(RCC_APB1Periph_I2C1, ENABLE);
+	RCC_APB2PeriphClockCmd(RCC_APB2Periph_SPI1, ENABLE);
 	RCC_APB1PeriphClockCmd(RCC_APB1Periph_SPI2, ENABLE);
 	PWR_BackupAccessCmd(ENABLE);
 	RCC_LSEConfig(RCC_LSE_ON);
@@ -128,6 +148,7 @@ void board_init(void)
     usart_init(usart1);
 	aht20_Init(aht20);
 	lcd_init(lcd);
+	w25q16_init(w25q16);
 	
 }
 

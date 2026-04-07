@@ -13,6 +13,7 @@
 #include "ui.h"
 #include "LCD.h"
 #include "page.h"
+#include "w25q16_burn.h"
 
 
 static void main_init(void *param)
@@ -24,10 +25,18 @@ static void main_init(void *param)
 	wireless_init();
     wifi_page_display(lcd);
     wireless_wait_connect();
+
     printf("System Starting...\n");
+
+    // w25q16_burn_font(w25q16);
+    // st7789_write_string_w25q16(w25q16, lcd, 0, 0, "cax123", 0xFFFF, 0x0000, 76);
+    // st7789_write_string_w25q16(w25q16, lcd, 0, 32, "cas", 0xFFFF, 0x0000, 32);
+
+    // w25q16_burn_img(w25q16);
+    // 测试显示
+    // w25q16_show_img(w25q16, lcd, 0, 0, IMG_WIFI_FILL);
     
 	main_page_display(lcd);
-
 	// 【关键】必须在 main_loop_init() 之前初始化工作队列
 	workqueue_init();
 	

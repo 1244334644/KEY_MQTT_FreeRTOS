@@ -3,13 +3,39 @@
 
 #include <stdint.h>
 
+typedef enum
+{
+    IMG_ERROR,
+    IMG_DUOYUN,
+    IMG_LEIZHENYU,
+    IMG_NA,
+    IMG_QING,
+    IMG_WENDUJI,
+    IMG_ICON_WIFI,
+    IMG_YINTIAN,
+    IMG_YUELIANG,
+    IMG_ZHONGXUE,
+    IMG_ZHONGYU,
+    IMG_WIFI,
+    IMG_NOWIFI,
+    IMG_WELCOME,
+    IMG_WIFI_FILL,
+    IMG_COUNT,  // 图片总数
+} img_id_t;
+
+
+
 
 typedef struct 
 {
+    img_id_t img_id;
     uint16_t width;
     uint16_t height;
     const uint8_t *data;
+    const uint32_t img_size;
 } img_t;
+
+
 
 extern const img_t img_welcome;
 extern const img_t img_error;

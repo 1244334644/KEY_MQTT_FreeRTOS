@@ -3205,8 +3205,10 @@ static const unsigned char gImage_error[51200] = { /* 0X10,0X10,0X00,0XA0,0X00,0
 
 const img_t img_error =
 {
+    .img_id = IMG_ERROR,
     .width =160,
     .height=160,
     .data = gImage_error,
+    .img_size = sizeof(gImage_error),
 };    
 

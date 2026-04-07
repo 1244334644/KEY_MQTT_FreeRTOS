@@ -369,7 +369,9 @@ const unsigned char gImage_icon_duoyun[5832] = { /* 0X10,0X10,0X00,0X36,0X00,0X3
 
 const img_t img_duoyun =
 {
+    .img_id = IMG_DUOYUN,
     .width=54,
     .height=54,
     .data = gImage_icon_duoyun,
+    .img_size = sizeof(gImage_icon_duoyun),
 }; 

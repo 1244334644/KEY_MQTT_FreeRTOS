@@ -140,7 +140,9 @@ const unsigned char gImage_icon_wenduji[2142] = { /* 0X10,0X10,0X00,0X15,0X00,0X
 
 const img_t img_wenduji =
 {
+    .img_id = IMG_WENDUJI,
     .width =21,
     .height=51,
     .data = gImage_icon_wenduji,
+    .img_size = sizeof(gImage_icon_wenduji),
 }; 

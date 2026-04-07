@@ -371,7 +371,9 @@ const unsigned char gImage_icon_leizhenyu[5832] = { /* 0X10,0X10,0X00,0X36,0X00,
 
 const img_t img_leizhenyu =
 {
+    .img_id = IMG_LEIZHENYU,
     .width =54,
     .height=54,
     .data = gImage_icon_leizhenyu,
+    .img_size = sizeof(gImage_icon_leizhenyu),
 }; 

@@ -19,10 +19,10 @@ void wifi_page_display(lcd_desc_t lcd)
 
     const uint16_t color_bg = mkcolor(0,0,0);//黑色
     ui_fill_color(lcd, 0, 0, 239, 319, color_bg);//白色背景
-    ui_draw_image(lcd, 30, 15, &img_wifi);
-    ui_write_string(lcd, 88, 191, "WiFi",mkcolor(0,255,234) ,color_bg ,&font32);
-    ui_write_string(lcd, x, 231, ssid,mkcolor(255,255,255) ,color_bg ,&font20);
-    ui_write_string(lcd, 84, 263, "连接中",mkcolor(148,198,255) ,color_bg ,&font24);
+    ui_draw_image(lcd, 30, 15, IMG_WIFI);
+    ui_write_string(lcd, 88, 191, "WiFi",mkcolor(0,255,234) ,color_bg ,32);//WiFi
+    ui_write_string(lcd, x, 231, ssid,mkcolor(255,255,255) ,color_bg ,20);//SSID
+    ui_write_string(lcd, 84, 263, "连接中",mkcolor(148,198,255) ,color_bg ,24);//连接中
 
 }
 

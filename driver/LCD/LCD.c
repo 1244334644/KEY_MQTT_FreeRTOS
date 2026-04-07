@@ -1,11 +1,15 @@
 #include <stdlib.h>
 #include <stdbool.h>
+#include <stdio.h>
 #include <string.h>
 #include "FreeRTOS.h"
 #include "task.h"
 #include "semphr.h"
 #include "LCD.h"
 #include "LCD_desc.h"
+#include "w25q16.h"
+#include "w25q16_desc.h"
+#include "w25q16_burn.h"
 
 #include "font.h"
 #include "img.h"
@@ -441,6 +445,271 @@ static bool is_gb2312(char ch)
 //     else
 //         return -1;
 // }
+// 自定义字符映射表
+static const char* font_ascii_map[] = {
+    NULL,               // font16 - 标准 ASCII (95 字符)
+    NULL,               // font20 - 标准 ASCII
+    NULL,               // font24 - 标准 ASCII
+    NULL,               // font32 - 标准 ASCII
+    "0123456789: -",    // font54 - 自定义 (13 字符)
+    "0123456789: -",    // font64 - 自定义 (13 字符)
+    "0123456789: -",    // font76 - 自定义 (13 字符)
+};
+
+static int get_font_map_index(uint8_t font_size)
+{
+    switch(font_size) {
+        case 16: return 0;
+        case 20: return 1;
+        case 24: return 2;
+        case 32: return 3;
+        case 54: return 4;
+        case 64: return 5;
+        case 76: return 6;
+        default: return 0;
+    }
+}
+
+// 在自定义映射表中查找字符索引
+static int find_char_in_map(const char *map, char ch)
+{
+    if(map == NULL) {
+        // 标准 ASCII
+        if(ch >= ' ' && ch <= '~') {
+            return ch - ' ';
+        }
+        return -1;
+    }
+    
+    // 自定义映射
+    const char *p = map;
+    int index = 0;
+    while(*p) {
+        if(*p == ch) {
+            return index;
+        }
+        p++;
+        index++;
+    }
+    return -1;  // 字符不在映射表中
+}
+
+
+static uint32_t get_w25q16_font_addr(uint8_t font_size)
+{
+    switch(font_size) {
+        case 16: return W25Q16_FONT16_ADDR;
+        case 20: return W25Q16_FONT20_ADDR;
+        case 24: return W25Q16_FONT24_ADDR;
+        case 32: return W25Q16_FONT32_ADDR;
+        case 54: return W25Q16_FONT54_ADDR;
+        case 64: return W25Q16_FONT64_ADDR;
+        case 76: return W25Q16_FONT76_ADDR;
+        default: return W25Q16_FONT16_ADDR;
+    }
+}
+
+
+static void w25q16_get_ascii_model(w25q16_desc_t w25q16, uint8_t font_size, char ch, uint8_t *buf)
+{
+    // 获取字符映射表
+    int map_idx = get_font_map_index(font_size);
+    const char *map = font_ascii_map[map_idx];
+    
+    // 查找字符索引
+    int char_index = find_char_in_map(map, ch);
+    if(char_index < 0) {
+        // 字符不存在，填充空白
+        uint16_t fwidth = font_size / 2;
+        uint16_t bytes_per_row = (fwidth + 7) / 8;
+        uint16_t bytes_per_char = font_size * bytes_per_row;
+        memset(buf, 0, bytes_per_char);
+        return;
+    }
+    
+    // 计算字模大小（半宽）
+    uint16_t fwidth = font_size / 2;
+    uint16_t bytes_per_row = (fwidth + 7) / 8;
+    uint16_t bytes_per_char = font_size * bytes_per_row;
+    
+    // 计算地址
+    uint32_t addr = get_w25q16_font_addr(font_size);
+    addr += char_index * bytes_per_char;
+    
+    // 读取字模
+    w25q16_read_data(w25q16, addr, buf, bytes_per_char);
+}
+
+// 从 W25Q16 查找汉字字模
+static bool w25q16_find_chinese(w25q16_desc_t w25q16, uint8_t qh, uint8_t ql, uint8_t *buf, uint8_t font_size)
+{
+    // 【修复】正确计算字节大小
+    uint16_t bytes_per_row = (font_size + 7) / 8;
+    uint32_t bytes_per_char = (uint32_t)font_size * bytes_per_row;
+    uint32_t entry_size = 2 + bytes_per_char;  // 编码(2字节) + 字模
+    
+    uint32_t addr = get_w25q16_font_addr(font_size);
+    
+    // 【修复】ASCII 字模大小计算 - 宽度是 font_size/2，不是 (font_size+1)/2
+    uint16_t ascii_width = font_size / 2;
+    uint16_t ascii_bytes_per_row = (ascii_width + 7) / 8;
+    uint32_t ascii_bytes_per_char = (uint32_t)font_size * ascii_bytes_per_row;
+    addr += 95 * ascii_bytes_per_char;
+    
+    // 遍历查找汉字
+    for(int i = 0; i < 10; i++) {  // 最多查找3000个汉字
+        uint8_t qh_read, ql_read;
+        w25q16_read_data(w25q16, addr, &qh_read, 1);
+        w25q16_read_data(w25q16, addr + 1, &ql_read, 1);
+        
+        // 检查是否到达结束标记
+        if (qh_read == 0x00 && ql_read == 0x00) {
+            return false;  // 未找到
+        }
+        
+        if (qh_read == qh && ql_read == ql) {
+            w25q16_read_data(w25q16, addr + 2, buf, bytes_per_char);
+            return true;  // 找到！
+        }
+        
+        addr += entry_size;
+    }
+    
+    return false;
+}
+
+// 显示字符串（从 W25Q16 读取字体）
+void st7789_write_string_w25q16(w25q16_desc_t w25q16, lcd_desc_t lcd,
+                                 uint16_t x, uint16_t y,
+                                 const char *str,
+                                 uint16_t color, uint16_t bg_color,
+                                 uint8_t font_size)
+{
+    uint16_t x0 = x;
+    uint8_t model[768];
+    
+    while(*str) {
+        uint8_t ch = (uint8_t)*str;
+        
+        if(ch >= 0xA1 && ch <= 0xF7) {
+            // 汉字 (GB2312)
+            uint8_t qh = ch;
+            uint8_t ql = (uint8_t)*(str + 1);
+            
+            if(ql >= 0xA1 && ql <= 0xFE) {
+                // 【修复】先检查是否需要换行（汉字宽度 = font_size）
+                if(x + font_size > 240) {
+                    x = x0;
+                    y += font_size;
+                }
+                
+                if(w25q16_find_chinese(w25q16, qh, ql, model, font_size)) {
+                    st7789_draw_font(lcd, x, y, font_size, font_size, model, color, bg_color);
+                } else {
+                    st7789_fill_color(lcd, x, y, x + font_size - 1, y + font_size - 1, 0xF800);
+                }
+                x += font_size;
+                str += 2;
+            } else {
+                str++;
+            }
+        } else if(ch >= ' ' && ch <= '~') {
+            // ASCII
+            uint16_t char_width = font_size / 2;
+            
+            // 【修复】先检查是否需要换行（ASCII 宽度 = font_size / 2）
+            if(x + char_width > 240) {
+                x = x0;
+                y += font_size;
+            }
+            
+            w25q16_get_ascii_model(w25q16, font_size, ch, model);
+            st7789_draw_font(lcd, x, y, char_width, font_size, model, color, bg_color);
+            x += char_width;
+            str++;
+        } else if(ch == '\n') {
+            x = x0;
+            y += font_size;
+            str++;
+        } else {
+            str++;
+        }
+        
+        // 【删除】移除这里的自动换行，已在上面处理
+    }
+}
+
+
+void w25q16_show_img(w25q16_desc_t w25q16, lcd_desc_t lcd, uint16_t x, uint16_t y, img_id_t img_id)
+{
+    // 从图片起始地址开始遍历查找
+    uint32_t addr = W25Q16_IMG_START_ADDR;
+    
+    printf("Looking for img[%u] from 0x%06lX\r\n", img_id, addr);
+    
+    while(1) {
+        // 【优化】一次性读取头部 5 字节: ID(1) + Width(2) + Height(2)
+        uint8_t header[5];
+        w25q16_read_data(w25q16, addr, header, 5);
+        
+        uint8_t id_read = header[0];
+        
+        // 检查结束标记
+        if(id_read == 0xFF) {
+            printf("Img[%u] not found!\r\n", img_id);
+            return;
+        }
+        
+        // 解析宽高（小端格式）
+        uint16_t width = header[1] | ((uint16_t)header[2] << 8);
+        uint16_t height = header[3] | ((uint16_t)header[4] << 8);
+        uint32_t img_size = (uint32_t)width * height * 2;
+        
+        // 找到目标图片
+        if(id_read == (uint8_t)img_id) {
+            
+            printf("Found Img[%u] at 0x%06lX\r\n", img_id, addr);
+            
+            // 检查屏幕边界
+            if(x + width > LCD_WIDTH || y + height > LCD_HEIGHT) {
+                printf("Img out of screen! x=%u y=%u w=%u h=%u\r\n", x, y, width, height);
+                return;
+            }
+            
+            // 设置显示区域
+            st7789_set_range_and_prepare_gram(lcd, x, y, x + width - 1, y + height - 1);
+            
+            // 图片数据起始地址: 跳过 ID(1) + Width(2) + Height(2) = 5字节
+            uint32_t data_addr = addr + 5;
+            
+            // 分块读取并显示（避免一次性分配大内存）
+            uint32_t remaining = img_size;
+            uint32_t chunk_size = 2048;  // 每次读取2KB
+            uint8_t *buf = pvPortMalloc(chunk_size);
+            
+            if(buf == NULL) {
+                printf("Malloc failed!\r\n");
+                return;
+            }
+            
+            while(remaining > 0) {
+                uint32_t chunk = (remaining > chunk_size) ? chunk_size : remaining;
+                w25q16_read_data(w25q16, data_addr, buf, chunk);
+                st7789_write_gram(lcd, buf, chunk, false);
+                data_addr += chunk;
+                remaining -= chunk;
+            }
+            
+            vPortFree(buf);
+            printf("Img display done!\r\n");
+            return;
+        }
+        
+        // 跳到下一张图片: ID(1) + Width(2) + Height(2) + Data(N) = 5 + img_size
+        addr += 5 + img_size;
+    }
+}
+
 
 void st7789_write_string(lcd_desc_t lcd, uint16_t x, uint16_t y,const char *str, uint16_t color, uint16_t bg_color,const font_t *font)
 {

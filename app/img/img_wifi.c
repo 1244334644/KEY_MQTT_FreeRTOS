@@ -3696,7 +3696,9 @@ const unsigned char gImage_wifi[59040] = { /* 0X10,0X10,0X00,0XB4,0X00,0XA4,0X01
 
 const img_t img_wifi =
 {
+    .img_id = IMG_WIFI,
     .width = 180,
     .height = 164,
     .data = gImage_wifi,
+    .img_size = sizeof(gImage_wifi),
 };

@@ -134,7 +134,9 @@ const unsigned char gImage_wifi_fill[2048] = { /* 0X10,0X10,0X00,0X20,0X00,0X20,
 
 const img_t img_wifi_fill =
 {
-    .width =24,
-    .height=24,
+    .img_id = IMG_WIFI_FILL,
+    .width =32,
+    .height=32,
     .data = gImage_wifi_fill,
+    .img_size = sizeof(gImage_wifi_fill),
 };    

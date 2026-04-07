@@ -371,8 +371,10 @@ const unsigned char gImage_icon_zhongxue[5832] = { /* 0X10,0X10,0X00,0X36,0X00,0
 
 const img_t img_zhongxue =
 {
+    .img_id = IMG_ZHONGXUE,
     .width =54,
     .height=54,
     .data = gImage_icon_zhongxue,
+    .img_size = sizeof(gImage_icon_zhongxue),
 }; 
 

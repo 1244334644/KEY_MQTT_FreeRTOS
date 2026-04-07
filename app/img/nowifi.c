@@ -134,7 +134,9 @@ const unsigned char gImage_nowifi[2048] = { /* 0X10,0X10,0X00,0X20,0X00,0X20,0X0
 
 const img_t img_nowifi =
 {
-    .width =24,
-    .height=24,
+    .img_id = IMG_NOWIFI,
+    .width =32,
+    .height=32,
     .data = gImage_nowifi,
+    .img_size = sizeof(gImage_nowifi),
 };    

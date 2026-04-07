@@ -369,7 +369,9 @@ const unsigned char gImage_icon_yueliang[5832] = { /* 0X10,0X10,0X00,0X36,0X00,0
 
 const img_t img_yueliang =
 {
+    .img_id = IMG_YUELIANG,
     .width =54,
     .height=54,
     .data = gImage_icon_yueliang,
+    .img_size = sizeof(gImage_icon_yueliang),
 }; 

@@ -77,7 +77,9 @@ static const unsigned char gImage_icon_wifi[1152] = { /* 0X00,0X10,0X18,0X00,0X1
 
 const img_t img_icon_wifi =
 {
+    .img_id = IMG_ICON_WIFI,
     .width = 24,
     .height = 24,
     .data = gImage_icon_wifi,
+    .img_size = sizeof(gImage_icon_wifi),
 };

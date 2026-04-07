@@ -8,7 +8,7 @@
 
 void ui_init(lcd_desc_t lcd);
 void ui_fill_color(lcd_desc_t lcd, uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2, uint16_t color);
-void ui_write_string(lcd_desc_t lcd, uint16_t x, uint16_t y,const char *str, uint16_t color, uint16_t bg_color,const font_t *font);
-void ui_draw_image(lcd_desc_t lcd, uint16_t x, uint16_t y, const img_t *img);
+void ui_write_string(lcd_desc_t lcd, uint16_t x, uint16_t y,const char *str, uint16_t color, uint16_t bg_color, uint8_t font_size);
+void ui_draw_image(lcd_desc_t lcd, uint16_t x, uint16_t y, img_id_t img_id);
 
 #endif // __UI_H__
