@@ -54,7 +54,7 @@
   - KEY2：PE3
 - **USART**
   - USART1：PA9(TX) / PA10(RX)
-  - USART2：PA2(TX) / PA3(RX)
+  - USART2：PA2(TX) / PA3(RX) 对应esp32的IO06(RX), IO07(TX)
 - **AHT20（I2C1）**
   - PB6(SCL) / PB7(SDA)
 - **LCD（SPI2）**
