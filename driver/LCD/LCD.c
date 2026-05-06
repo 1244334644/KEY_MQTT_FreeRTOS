@@ -557,7 +557,7 @@ static bool w25q16_find_chinese(w25q16_desc_t w25q16, uint8_t qh, uint8_t ql, ui
     addr += 95 * ascii_bytes_per_char;
     
     // 遍历查找汉字
-    for(int i = 0; i < 10; i++) {  // 最多查找3000个汉字
+    for(int i = 0; i < 20; i++) {  // 最多查找3000个汉字
         uint8_t qh_read, ql_read;
         w25q16_read_data(w25q16, addr, &qh_read, 1);
         w25q16_read_data(w25q16, addr + 1, &ql_read, 1);
