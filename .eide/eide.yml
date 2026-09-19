@@ -71,6 +71,7 @@ virtualFolder:
         - name: esp32_c3
           files:
             - path: driver/esp32_c3/espat.c
+            - path: driver/esp32_c3/ble_prov.c
           folders: []
         - name: NET
           files: []

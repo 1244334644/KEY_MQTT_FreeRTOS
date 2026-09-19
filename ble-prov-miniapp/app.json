@@ -1,0 +1,18 @@
+{
+  "pages": [
+    "pages/index/index"
+  ],
+  "window": {
+    "backgroundTextStyle": "light",
+    "navigationBarBackgroundColor": "#07C160",
+    "navigationBarTitleText": "WiFi配网",
+    "navigationBarTextStyle": "white"
+  },
+  "permission": {
+    "scope.bluetooth": {
+      "desc": "用于扫描和连接BLE设备进行WiFi配网"
+    }
+  },
+  "style": "v2",
+  "sitemapLocation": "sitemap.json"
+}
